@@ -120,6 +120,14 @@ h1 { font-size: 17px; margin: 0; }
 }
 
 .field, .check { display: inline-flex; align-items: center; gap: 5px; color: var(--text-3); white-space: nowrap; }
+/* The control bar already wraps; these two labels are long, so let them
+   sit as whole units and tint when active rather than stretch the row. */
+.check input[type=checkbox] { accent-color: var(--accent); }
+.check:has(input:checked) { color: var(--accent); font-weight: 600; }
+@media (max-width: 1100px) {
+  .bar { gap: 10px 14px; }
+  .check { font-size: 13px; }
+}
 .field-group { display: inline-flex; align-items: center; gap: 8px; }
 
 /* ----------------------------------------------------------------- shell */

@@ -27,6 +27,10 @@ const C = {
   EXPORT_LINE: '#dcd8cc',
 };
 
+/* Flip either default here. */
+const SHOW_PARAM_COUNT_DEFAULT = false;   // "Show parameter count"
+const SHOW_CHART_DEFAULT = true;          // Tab 2's PSNR-vs-parameters chart
+
 const IDX = window.VIEWER_INDEX || null;
 const $ = (s, r) => (r || document).querySelector(s);
 const el = (t, cls, txt) => { const n = document.createElement(t);
@@ -59,6 +63,7 @@ function start() {
     group: null, config: null, tab: 'compare', scene: null,
     variant: null, method: null, zoom: 0, cols: 4,
     sort: false, showMetric: true, diff: false, amp: 8,
+    showParams: SHOW_PARAM_COUNT_DEFAULT, showChart: SHOW_CHART_DEFAULT,
     tags: new Set(), query: '', ab: false, abA: null, abB: null, abSplit: 50,
   };
   let pinned = null;        // {u, v} normalised zoom centre
@@ -96,6 +101,41 @@ function start() {
 
   function inputMetric(sc) { return metricFor(sc, '_input', ''); }
 
+  /** Exact parameter count for a (method, variant), or null.
+   *
+   * Only content files are consulted, never anything outside this folder.
+   * Preference order, first hit wins:
+   *   1. scene.meta.params[method][variant]  (per scene, most specific)
+   *   2. collection variant.params[method]   (from variants.json)
+   *   3. variant.params                      (one count for the budget)
+   * None of these exists in the current content, so every method falls
+   * back to the variant's own label. A number is never invented.
+   */
+  function exactParams(sc, c, method, variantId) {
+    const m = sc && sc.meta && sc.meta.params;
+    if (m && m[method] && m[method][variantId] != null) return m[method][variantId];
+    const v = variantById(c, variantId);
+    if (v && v.params != null) {
+      if (typeof v.params === 'object') {
+        if (v.params[method] != null) return v.params[method];
+      } else {
+        return v.params;
+      }
+    }
+    return null;
+  }
+
+  function groupDigits(n) { return Number(n).toLocaleString('en-US'); }
+
+  /** "nafnet (49,837)" when an exact count is known, else "nafnet (50K)". */
+  function withCount(name, sc, c, method, variantId) {
+    if (!S.showParams) return name;
+    const exact = exactParams(sc, c, method, variantId);
+    if (exact != null) return `${name} (${groupDigits(exact)})`;
+    const v = variantById(c, variantId);
+    return v && v.label ? `${name} (${v.label})` : name;
+  }
+
   // ------------------------------------------------------------ the hash
 
   function writeHash() {
@@ -107,6 +147,9 @@ function start() {
     if (S.zoom) p.set('z', String(S.zoom));
     // Only meaningful while the split is open; links without it still work.
     if (S.ab) p.set('p', (S.abSplit / 100).toFixed(4).replace(/0+$/, '').replace(/\.$/, '.0'));
+    // only written when they differ from the default, so old links stay short
+    if (S.showParams !== SHOW_PARAM_COUNT_DEFAULT) p.set('pc', S.showParams ? '1' : '0');
+    if (S.showChart !== SHOW_CHART_DEFAULT) p.set('cc', S.showChart ? '1' : '0');
     history.replaceState(null, '', '#' + p.toString());
   }
 
@@ -117,6 +160,7 @@ function start() {
       scene: p.get('s'), variant: p.get('v'), method: p.get('m'),
       zoom: p.get('z') ? Number(p.get('z')) : null,
       split: p.get('p') != null ? Number(p.get('p')) : null,
+      showParams: p.get('pc'), showChart: p.get('cc'),
     };
   }
 
@@ -393,7 +437,9 @@ function start() {
     grid.className = 'grid' + (S.tab === 'scale' ? ' row' : '');
     grid.style.setProperty('--cols', S.cols);
     grid.style.setProperty('--rowwidth', Math.max(140, Math.round(1100 / S.cols)) + 'px');
-    $('#chartwrap').hidden = S.tab !== 'scale';
+    $('#chartwrap').hidden = (S.tab !== 'scale') || !S.showChart;
+    // the chart tick box only means anything on tab 2
+    $('#showchartwrap').hidden = S.tab !== 'scale';
 
     loadScene(sceneKey(), sc => {
       if (!sc) { grid.appendChild(el('p', 'warn', 'scene data did not load')); return; }
@@ -413,12 +459,17 @@ function start() {
       if (S.tab === 'compare') {
         c.methods.forEach(m => {
           const src = (sc.images[m] || {})[S.variant] || null;
-          items.push({ name: m, src, value: metricFor(sc, m, S.variant) });
+          items.push({ name: withCount(m, sc, c, m, S.variant), src,
+                       value: metricFor(sc, m, S.variant) });
         });
       } else {
         variantsOf(c).forEach(v => {
           const src = (sc.images[S.method] || {})[v.id] || null;
-          items.push({ name: v.label, src, value: metricFor(sc, S.method, v.id),
+          const exact = S.showParams
+            ? exactParams(sc, c, S.method, v.id) : null;
+          items.push({
+            name: exact != null ? `${v.label} (${groupDigits(exact)})` : v.label,
+            src, value: metricFor(sc, S.method, v.id),
             badge: v.badge, vid: v.id });
         });
       }
@@ -452,7 +503,8 @@ function start() {
       if (!sc.reference && S.diff) { S.diff = false; dbox.checked = false;
         $('#ampwrap').hidden = true; }
 
-      if (S.tab === 'scale') renderChart(c, sc);
+      if (S.tab === 'scale' && S.showChart) renderChart(c, sc);
+      else $('#chart').textContent = '';
       renderCaption(c, sc);
       applyZoom();
       applyDiff(sc);
@@ -495,8 +547,11 @@ function start() {
   function renderChart(c, sc) {
     const box = $('#chart'); box.textContent = '';
     const vs = variantsOf(c).filter(v => v.value != null);
-    const pts = vs.map(v => ({ x: v.value, y: metricFor(sc, S.method, v.id), id: v.id,
-      label: v.label })).filter(p => p.y != null);
+    const pts = vs.map(v => {
+      const exact = S.showParams ? exactParams(sc, c, S.method, v.id) : null;
+      return { x: v.value, y: metricFor(sc, S.method, v.id), id: v.id,
+               label: exact != null ? groupDigits(exact) : v.label };
+    }).filter(p => p.y != null);
     if (pts.length < 2) { box.appendChild(el('p', 'muted',
       'Not enough points to plot for this scene.')); return; }
 
@@ -833,7 +888,8 @@ function start() {
       const rows = Math.ceil(panels.length / cols);
       const PAD = 14, HEAD = 46, TITLE = 34;
       const capLines = wrapText($('#caption').textContent, 110);
-      const chartSvg = (S.tab === 'scale') ? $('#chart svg') : null;
+      const chartSvg = (S.tab === 'scale' && S.showChart)
+        ? $('#chart svg') : null;
       const chartH = chartSvg ? 320 : 0;
 
       const W = PAD + cols * (pw + PAD);
@@ -972,6 +1028,10 @@ function start() {
   $('#zoom').onchange = e => { S.zoom = Number(e.target.value); pinned = null; applyZoom(); writeHash(); };
   $('#sort').onchange = e => { S.sort = e.target.checked; renderStage(); };
   $('#showmetric').onchange = e => { S.showMetric = e.target.checked; renderStage(); };
+  $('#showparams').onchange = e => { S.showParams = e.target.checked;
+    renderStage(); writeHash(); };
+  $('#showchart').onchange = e => { S.showChart = e.target.checked;
+    renderStage(); writeHash(); };
   $('#diff').onchange = e => { S.diff = e.target.checked;
     $('#ampwrap').hidden = !S.diff; renderStage(); };
   $('#amp').oninput = e => { S.amp = Number(e.target.value); if (S.diff) renderStage(); };
@@ -1019,6 +1079,11 @@ function start() {
   if (h.variant && variantById(coll(), h.variant)) S.variant = h.variant;
   if (h.method && coll().methods.includes(h.method)) S.method = h.method;
   if (h.zoom) { S.zoom = h.zoom; $('#zoom').value = String(h.zoom); }
+  // absent keys keep the defaults, so links made before this existed work
+  if (h.showParams != null) S.showParams = h.showParams === '1';
+  if (h.showChart != null) S.showChart = h.showChart === '1';
+  $('#showparams').checked = S.showParams;
+  $('#showchart').checked = S.showChart;
   if (h.split != null && isFinite(h.split)) {
     // Accept a fraction (0..1), which is what writeHash emits.
     S.abSplit = Math.max(0, Math.min(100, h.split * 100));
