@@ -6,6 +6,27 @@
  */
 'use strict';
 
+/* The palette, mirroring style.css :root. Canvas and SVG cannot read CSS
+ * custom properties, so the few colours drawn in code live here and
+ * nowhere else. EXPORT_* are deliberately independent of the page theme:
+ * a saved PNG is always white with dark text, whatever the page looks
+ * like. */
+const C = {
+  panel:    '#ffffff',
+  border:   '#dcd8cc',
+  text:     '#17202a',
+  text2:    '#4a5560',
+  text3:    '#6a7179',
+  accent:   '#1f5fbf',
+  accent2:  '#d9622b',   // lines and marks
+  accent2Text: '#b84f1f', // the same hue, dark enough for a label
+  gridline: '#dcd8cc',
+  EXPORT_BG:   '#ffffff',
+  EXPORT_TEXT: '#17202a',
+  EXPORT_SUB:  '#4a5560',
+  EXPORT_LINE: '#dcd8cc',
+};
+
 const IDX = window.VIEWER_INDEX || null;
 const $ = (s, r) => (r || document).querySelector(s);
 const el = (t, cls, txt) => { const n = document.createElement(t);
@@ -84,6 +105,8 @@ function start() {
     if (S.variant) p.set('v', S.variant);
     if (S.method) p.set('m', S.method);
     if (S.zoom) p.set('z', String(S.zoom));
+    // Only meaningful while the split is open; links without it still work.
+    if (S.ab) p.set('p', (S.abSplit / 100).toFixed(4).replace(/0+$/, '').replace(/\.$/, '.0'));
     history.replaceState(null, '', '#' + p.toString());
   }
 
@@ -93,6 +116,7 @@ function start() {
       group: p.get('g'), config: p.get('c'), tab: p.get('t'),
       scene: p.get('s'), variant: p.get('v'), method: p.get('m'),
       zoom: p.get('z') ? Number(p.get('z')) : null,
+      split: p.get('p') != null ? Number(p.get('p')) : null,
     };
   }
 
@@ -376,7 +400,15 @@ function start() {
       const base = inputMetric(sc);
       const items = [];
 
-      if (sc.input) items.push({ name: 'input', src: sc.input, value: base });
+      // A metric for "_input" can only exist if an input and a reference
+      // existed when the data was generated, so their absence here means
+      // the images were left out of this copy -- not that there were none.
+      // Show the panel either way, so the gap is visible and explained
+      // rather than silently dropped.
+      const expected = base != null;
+      if (sc.input || expected) {
+        items.push({ name: 'input', src: sc.input, value: base });
+      }
 
       if (S.tab === 'compare') {
         c.methods.forEach(m => {
@@ -390,7 +422,9 @@ function start() {
             badge: v.badge, vid: v.id });
         });
       }
-      if (sc.reference) items.push({ name: 'reference', src: sc.reference, value: null });
+      if (sc.reference || expected) {
+        items.push({ name: 'reference', src: sc.reference, value: null });
+      }
 
       const body = items.filter(i => i.name !== 'input' && i.name !== 'reference');
       if (S.sort) body.sort((a, b) => {
@@ -408,6 +442,16 @@ function start() {
         grid.appendChild(p);
       });
 
+      // Without a reference there is nothing to difference against, so the
+      // control is disabled rather than left to do nothing silently.
+      const dbox = $('#diff');
+      dbox.disabled = !sc.reference;
+      dbox.title = sc.reference ? ''
+        : 'Needs the reference image, which is not included in this copy';
+      dbox.parentElement.style.opacity = sc.reference ? '' : '0.5';
+      if (!sc.reference && S.diff) { S.diff = false; dbox.checked = false;
+        $('#ampwrap').hidden = true; }
+
       if (S.tab === 'scale') renderChart(c, sc);
       renderCaption(c, sc);
       applyZoom();
@@ -419,6 +463,18 @@ function start() {
 
   function renderCaption(c, sc) {
     const bits = [];
+    const missing = [];
+    if (!sc.input && inputMetric(sc) != null) missing.push('input');
+    if (!sc.reference && inputMetric(sc) != null) missing.push('reference');
+    if (missing.length) {
+      bits.push('The ' + missing.join(' and ') + ' image' +
+        (missing.length > 1 ? 's are' : ' is') + ' not included in this copy '
+        + '(dataset licence), so ' + (missing.length > 1 ? 'those panels' : 'that panel')
+        + ' shows "not available". The metric values were computed against '
+        + 'the real reference before the images were removed, so they are '
+        + 'unaffected; the difference view needs the reference and is '
+        + 'unavailable.');
+    }
     if (c.caption) bits.push(c.caption);
     if (sc.caption) bits.push(sc.caption);
     bits.push('Scene ' + sc.id + '.');
@@ -472,41 +528,41 @@ function start() {
       svg.appendChild(n); return n;
     };
 
-    add('rect', { x: 0, y: 0, width: W, height: H, fill: '#fff' });
-    add('line', { x1: M.l, y1: H - M.b, x2: W - M.r, y2: H - M.b, stroke: '#d8dce2' });
-    add('line', { x1: M.l, y1: M.t, x2: M.l, y2: H - M.b, stroke: '#d8dce2' });
+    add('rect', { x: 0, y: 0, width: W, height: H, fill: C.panel });
+    add('line', { x1: M.l, y1: H - M.b, x2: W - M.r, y2: H - M.b, stroke: C.accent });
+    add('line', { x1: M.l, y1: M.t, x2: M.l, y2: H - M.b, stroke: C.accent });
     for (let i = 0; i <= 4; i++) {
       const v = y0 + (y1 - y0) * i / 4;
-      add('line', { x1: M.l, y1: Y(v), x2: W - M.r, y2: Y(v), stroke: '#f0f2f5' });
+      add('line', { x1: M.l, y1: Y(v), x2: W - M.r, y2: Y(v), stroke: C.gridline });
       add('text', { x: M.l - 8, y: Y(v) + 4, 'text-anchor': 'end',
-        'font-size': 11, fill: '#666c76' }, fmt(v));
+        'font-size': 11, fill: C.accent }, fmt(v));
     }
     pts.forEach(p => add('text', { x: X(p.x), y: H - M.b + 16, 'text-anchor': 'middle',
-      'font-size': 11, fill: '#666c76' }, p.label));
+      'font-size': 11, fill: C.accent }, p.label));
     add('text', { x: (M.l + W - M.r) / 2, y: H - 6, 'text-anchor': 'middle',
-      'font-size': 12, fill: '#16181d' }, AX.variant + (lg ? ' (log scale)' : ''));
-    add('text', { x: 14, y: (M.t + H - M.b) / 2, 'font-size': 12, fill: '#16181d',
+      'font-size': 12, fill: C.text }, AX.variant + (lg ? ' (log scale)' : ''));
+    add('text', { x: 14, y: (M.t + H - M.b) / 2, 'font-size': 12, fill: C.text,
       transform: 'rotate(-90 14 ' + ((M.t + H - M.b) / 2) + ')',
       'text-anchor': 'middle' }, MET.name + unit);
 
     if (base != null) {
       add('line', { x1: M.l, y1: Y(base), x2: W - M.r, y2: Y(base),
-        stroke: '#999', 'stroke-dasharray': '6 4' });
+        stroke: C.text3, 'stroke-dasharray': '6 4' });
       add('text', { x: W - M.r - 4, y: Y(base) - 5, 'text-anchor': 'end',
-        'font-size': 11, fill: '#777' }, 'input');
+        'font-size': 11, fill: C.text3 }, 'input');
     }
     if (curve.length > 1) {
-      add('polyline', { fill: 'none', stroke: '#9bb8e8', 'stroke-width': 2,
+      add('polyline', { fill: 'none', stroke: C.accent2, 'stroke-width': 2,
         points: curve.map(p => X(p.x) + ',' + Y(p.y)).join(' ') });
       add('text', { x: X(curve[curve.length - 1].x) - 4,
         y: Y(curve[curve.length - 1].y) - 7, 'text-anchor': 'end',
-        'font-size': 11, fill: '#6f8fc4' }, 'all scenes');
+        'font-size': 11, fill: C.accent2Text }, 'all scenes');
     }
     const sorted = pts.slice().sort((a, b) => a.x - b.x);
-    add('polyline', { fill: 'none', stroke: '#1f5fd0', 'stroke-width': 2.2,
+    add('polyline', { fill: 'none', stroke: C.accent, 'stroke-width': 2.2,
       points: sorted.map(p => X(p.x) + ',' + Y(p.y)).join(' ') });
     sorted.forEach(p => {
-      const dot = add('circle', { cx: X(p.x), cy: Y(p.y), r: 5, fill: '#1f5fd0',
+      const dot = add('circle', { cx: X(p.x), cy: Y(p.y), r: 5, fill: C.accent,
         class: 'pt' });
       dot.addEventListener('click', () => {
         document.querySelectorAll('#grid .panel').forEach(n =>
@@ -542,22 +598,116 @@ function start() {
       if (sel === '#abA') S.abA = n.value; else S.abB = n.value;
       n.onchange = () => { if (sel === '#abA') S.abA = n.value; else S.abB = n.value; drawAB(); };
     });
-    $('#absplit').oninput = () => { S.abSplit = Number($('#absplit').value); drawAB(); };
+    $('#absplit').oninput = () => setSplit(Number($('#absplit').value), true);
     $('#abclose').onclick = () => { S.ab = false; bar.hidden = true;
       const s = $('#abstage'); if (s) s.remove(); };
     drawAB();
 
+    /** Rebuild the overlay. The split itself is moved by `setSplit`, which
+     *  only touches two style properties, so dragging never re-creates the
+     *  images and never reloads them. */
     function drawAB() {
       let stage = $('#abstage');
       if (!stage) { stage = el('div', 'abstage'); stage.id = 'abstage';
         $('#grid').before(stage); }
       stage.textContent = '';
       stage.style.aspectRatio = '1 / 1';
-      const a = el('div', 'layer'); const ia = el('img'); ia.src = S.abA; a.appendChild(ia);
-      const b = el('div', 'layer'); const ib = el('img'); ib.src = S.abB; b.appendChild(ib);
-      b.style.clipPath = 'inset(0 0 0 ' + S.abSplit + '%)';
-      const d = el('div', 'divider'); d.style.left = S.abSplit + '%';
+
+      const a = el('div', 'layer'); const ia = el('img');
+      ia.src = S.abA; ia.alt = 'A'; ia.draggable = false; a.appendChild(ia);
+      const b = el('div', 'layer'); const ib = el('img');
+      ib.src = S.abB; ib.alt = 'B'; ib.draggable = false; b.appendChild(ib);
+
+      const d = el('button', 'divider');
+      d.type = 'button';
+      d.setAttribute('role', 'slider');
+      d.setAttribute('aria-label', 'Split between A and B');
+      d.setAttribute('aria-valuemin', '0');
+      d.setAttribute('aria-valuemax', '100');
+      d.setAttribute('aria-orientation', 'vertical');
+      const grip = el('span', 'grip');
+      grip.append(el('i'), el('i'));
+      d.appendChild(grip);
+
       stage.append(a, b, d);
+      stage._clip = b; stage._handle = d;
+      setSplit(S.abSplit);
+      wireSplit(stage, d);
+    }
+
+    /** The one place the split is applied, so the DOM cannot drift from S. */
+    function setSplit(pct, fromUser) {
+      S.abSplit = Math.max(0, Math.min(100, pct));
+      const stage = $('#abstage');
+      if (stage && stage._clip) {
+        stage._clip.style.clipPath = 'inset(0 0 0 ' + S.abSplit + '%)';
+        stage._handle.style.left = S.abSplit + '%';
+        stage._handle.setAttribute('aria-valuenow', S.abSplit.toFixed(1));
+        stage._handle.setAttribute('aria-valuetext', S.abSplit.toFixed(0) + '%');
+      }
+      const slider = $('#absplit');
+      if (slider && Number(slider.value) !== Math.round(S.abSplit)) {
+        slider.value = String(Math.round(S.abSplit));
+      }
+      if (fromUser) writeHash();
+    }
+    renderAB.setSplit = setSplit;
+
+    function wireSplit(stage, handle) {
+      // The split is a fraction of the image box, not of the viewport, so
+      // it is independent of zoom and of the element's size on screen.
+      const pctFromEvent = ev => {
+        const r = stage.getBoundingClientRect();
+        if (!r.width) return S.abSplit;
+        return ((ev.clientX - r.left) / r.width) * 100;
+      };
+
+      const onMove = ev => { setSplit(pctFromEvent(ev), false); ev.preventDefault(); };
+      const onUp = ev => {
+        stage.classList.remove('dragging');
+        handle.removeEventListener('pointermove', onMove);
+        handle.removeEventListener('pointerup', onUp);
+        handle.removeEventListener('pointercancel', onUp);
+        if (handle.hasPointerCapture && handle.hasPointerCapture(ev.pointerId)) {
+          handle.releasePointerCapture(ev.pointerId);
+        }
+        writeHash();
+      };
+
+      handle.addEventListener('pointerdown', ev => {
+        if (ev.button != null && ev.button !== 0) return;
+        ev.preventDefault();                       // no text selection, no image drag
+        handle.focus();
+        stage.classList.add('dragging');
+        // Capture means the drag survives the cursor leaving the image.
+        if (handle.setPointerCapture) handle.setPointerCapture(ev.pointerId);
+        handle.addEventListener('pointermove', onMove);
+        handle.addEventListener('pointerup', onUp);
+        handle.addEventListener('pointercancel', onUp);
+      });
+
+      // Clicking anywhere on the image jumps the split there.
+      stage.addEventListener('pointerdown', ev => {
+        if (ev.target === handle || handle.contains(ev.target)) return;
+        setSplit(pctFromEvent(ev), true);
+      });
+
+      handle.addEventListener('dblclick', ev => {
+        ev.preventDefault(); setSplit(50, true);
+      });
+
+      handle.addEventListener('keydown', ev => {
+        const big = ev.shiftKey ? 10 : 1;
+        let next = null;
+        if (ev.key === 'ArrowLeft') next = S.abSplit - big;
+        else if (ev.key === 'ArrowRight') next = S.abSplit + big;
+        else if (ev.key === 'Home') next = 0;
+        else if (ev.key === 'End') next = 100;
+        if (next === null) return;
+        ev.preventDefault();
+        ev.stopPropagation();                      // not the global shortcuts
+        setSplit(next, true);
+      });
     }
   }
 
@@ -581,8 +731,90 @@ function start() {
     });
   }
 
+  function selectedLabel(sel) {
+    const n = $(sel);
+    return n && n.selectedIndex >= 0 ? n.options[n.selectedIndex].text : '';
+  }
+
+  /** The A/B split exactly as shown: A left of the divider, B right, the
+   *  divider line, and a label on each side. */
+  function composeSplit(crops, done) {
+    const stage = $('#abstage');
+    if (!stage || !S.abA || !S.abB) return done(null);
+    loadImages([S.abA, S.abB], imgs => {
+      const a = imgs[S.abA], b = imgs[S.abB];
+      if (!a || !b) return done(null);
+      const at = pinned || hover || { u: 0.5, v: 0.5 };
+      const iw = a.naturalWidth, ih = a.naturalHeight;
+      const z = crops ? (S.zoom || 4) : 1;
+      const cw = Math.round(iw / z), chh = Math.round(ih / z);
+      const sx = crops ? Math.max(0, Math.min(iw - cw, Math.round(at.u * iw - cw / 2))) : 0;
+      const sy = crops ? Math.max(0, Math.min(ih - chh, Math.round(at.v * ih - chh / 2))) : 0;
+
+      const pw = cw * SCALE, ph = chh * SCALE;
+      const PAD = 14, TITLE = 34, LABELS = 26;
+      const capLines = wrapText($('#caption').textContent, 110);
+      const W = pw + 2 * PAD;
+      const H = TITLE + ph + LABELS + capLines.length * 18 + 2 * PAD;
+      const cv = document.createElement('canvas');
+      cv.width = W; cv.height = H;
+      const cx = cv.getContext('2d');
+      cx.fillStyle = C.EXPORT_BG; cx.fillRect(0, 0, W, H);   // white, always
+      cx.imageSmoothingEnabled = false;
+      cx.textBaseline = 'top';
+
+      const c = coll();
+      cx.fillStyle = C.EXPORT_TEXT;
+      cx.font = '600 17px system-ui, sans-serif';
+      cx.fillText([c.group, c.label, S.scene].filter(Boolean).join(' · ')
+        + '  —  A/B split' + (crops ? ' (zoom crop)' : ''), PAD, PAD);
+
+      const top = TITLE;
+      const splitPx = Math.round(pw * S.abSplit / 100);
+
+      // A fills the frame; B is drawn only to the right of the divider, so
+      // what lands in the file is what the clip-path shows on screen.
+      cx.drawImage(a, sx, sy, cw, chh, PAD, top, pw, ph);
+      cx.save();
+      cx.beginPath();
+      cx.rect(PAD + splitPx, top, pw - splitPx, ph);
+      cx.clip();
+      cx.drawImage(b, sx, sy, cw, chh, PAD, top, pw, ph);
+      cx.restore();
+
+      cx.strokeStyle = C.accent; cx.lineWidth = 2;
+      cx.beginPath();
+      cx.moveTo(PAD + splitPx + .5, top);
+      cx.lineTo(PAD + splitPx + .5, top + ph);
+      cx.stroke();
+      cx.strokeStyle = C.EXPORT_LINE; cx.lineWidth = 1;
+      cx.strokeRect(PAD + .5, top + .5, pw - 1, ph - 1);
+
+      const la = 'A: ' + selectedLabel('#abA');
+      const lb = selectedLabel('#abB') + ' :B';
+      cx.font = '600 15px system-ui, sans-serif';
+      cx.fillStyle = C.EXPORT_TEXT;
+      cx.fillText(la, PAD, top + ph + 5);
+      cx.textAlign = 'right';
+      cx.fillText(lb, PAD + pw, top + ph + 5);
+      cx.textAlign = 'left';
+      cx.font = '13px system-ui, sans-serif';
+      cx.fillStyle = C.EXPORT_SUB;
+      cx.fillText('split ' + S.abSplit.toFixed(0) + '%',
+        PAD + Math.max(0, splitPx - 30), top + ph + 5);
+
+      cx.fillStyle = C.EXPORT_SUB;
+      cx.font = '14px system-ui, sans-serif';
+      capLines.forEach((line, i) =>
+        cx.fillText(line, PAD, top + ph + LABELS + 6 + i * 18));
+      done(cv);
+    });
+  }
+
   /** Compose the current view onto a canvas: titles, panels, caption. */
   function composeCanvas(crops, done) {
+    // When the split is open it *is* the current view.
+    if (S.ab && $('#abstage')) return composeSplit(crops, done);
     const panels = panelsForSave();
     if (!panels.length) return done(null);
     const srcs = Array.from(new Set(panels.map(p => p.dataset.src)));
@@ -609,9 +841,9 @@ function start() {
       const cv = document.createElement('canvas');
       cv.width = W; cv.height = H;
       const cx = cv.getContext('2d');
-      cx.fillStyle = '#fff'; cx.fillRect(0, 0, W, H);
+      cx.fillStyle = C.EXPORT_BG; cx.fillRect(0, 0, W, H);   // white, always
       cx.imageSmoothingEnabled = false;
-      cx.fillStyle = '#16181d';
+      cx.fillStyle = C.EXPORT_TEXT;
       cx.font = '600 17px system-ui, sans-serif';
       cx.textBaseline = 'top';
       const c = coll();
@@ -623,11 +855,11 @@ function start() {
         const r = Math.floor(i / cols), col = i % cols;
         const x = PAD + col * (pw + PAD);
         const y = TITLE + r * (ph + HEAD + PAD);
-        cx.fillStyle = '#16181d';
+        cx.fillStyle = C.EXPORT_TEXT;
         cx.font = '600 15px system-ui, sans-serif';
         cx.fillText(p.dataset.name, x, y);
         const val = p.querySelector('.val');
-        if (val) { cx.fillStyle = '#444'; cx.font = '14px system-ui, sans-serif';
+        if (val) { cx.fillStyle = C.EXPORT_SUB; cx.font = '14px system-ui, sans-serif';
           cx.fillText(val.textContent, x, y + 19); }
         const im = imgs[p.dataset.src];
         if (im) {
@@ -635,13 +867,13 @@ function start() {
           const sy = crops ? Math.max(0, Math.min(ih - chh, Math.round(at.v * ih - chh / 2))) : 0;
           cx.drawImage(im, sx, sy, cw, chh, x, y + HEAD - 6, pw, ph);
         }
-        cx.strokeStyle = '#d8dce2';
+        cx.strokeStyle = C.EXPORT_LINE;
         cx.strokeRect(x + .5, y + HEAD - 6 + .5, pw - 1, ph - 1);
       });
 
       const afterPanels = TITLE + rows * (ph + HEAD + PAD);
       const finish = () => {
-        cx.fillStyle = '#555';
+        cx.fillStyle = C.EXPORT_SUB;
         cx.font = '14px system-ui, sans-serif';
         capLines.forEach((line, i) =>
           cx.fillText(line, PAD, afterPanels + chartH + i * 18));
@@ -688,7 +920,8 @@ function start() {
     }
   }
 
-  $('#save').onclick = () => composeCanvas(false, cv => download(cv, saveName('')));
+  $('#save').onclick = () => composeCanvas(false,
+    cv => download(cv, saveName(S.ab && $('#abstage') ? 'split' : '')));
   $('#savecrops').onclick = () => composeCanvas(true, cv => download(cv, saveName('zoom')));
   $('#copy').onclick = () => composeCanvas(false, cv => {
     if (!cv || !navigator.clipboard || !window.ClipboardItem) {
@@ -717,6 +950,10 @@ function start() {
         const cv = document.createElement('canvas');
         cv.width = im.naturalWidth * SCALE; cv.height = im.naturalHeight * SCALE;
         const cx = cv.getContext('2d');
+        // White first, so a transparent image does not export a
+        // transparent background.
+        cx.fillStyle = C.EXPORT_BG;
+        cx.fillRect(0, 0, cv.width, cv.height);
         cx.imageSmoothingEnabled = false;
         cx.drawImage(im, 0, 0, cv.width, cv.height);
         download(cv, saveName(p.dataset.name));
@@ -782,6 +1019,12 @@ function start() {
   if (h.variant && variantById(coll(), h.variant)) S.variant = h.variant;
   if (h.method && coll().methods.includes(h.method)) S.method = h.method;
   if (h.zoom) { S.zoom = h.zoom; $('#zoom').value = String(h.zoom); }
+  if (h.split != null && isFinite(h.split)) {
+    // Accept a fraction (0..1), which is what writeHash emits.
+    S.abSplit = Math.max(0, Math.min(100, h.split * 100));
+    S.ab = true;
+    $('#absplit').value = String(Math.round(S.abSplit));
+  }
 
   $('#app').hidden = false;
   renderAll();

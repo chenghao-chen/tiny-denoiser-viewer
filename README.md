@@ -39,20 +39,30 @@ The page says so if you try them from `file://`.
 | `raw_green_lr1e-3` | RAW green plane | 4 | 10 architectures × 6 parameter budgets |
 | `srgb_best_lr` | sRGB | 2 | 10 architectures × 2 parameter budgets |
 
-## Dataset images are excluded
+## Dataset images
 
-The noisy inputs and the ground-truth references come from
-[SIDD](https://abdokamel.github.io/sidd/), which permits research use but
-restricts redistribution. **They are not in this repository.** Only model
-outputs are published here.
+The noisy inputs (`_input.png`) and ground-truth references
+(`_reference.png`) are crops from
+[SIDD](https://abdokamel.github.io/sidd/) (Abdelhamed, Lin and Brown,
+CVPR 2018). They are included here so the comparison is complete and the
+difference-from-reference view works.
 
-Two consequences: the "input" and "reference" panels show *not available*,
-and the difference-from-reference view cannot be used. The PSNR values are
-still shown, because they were computed against the real references before
-the export.
+**If you fork or reuse this repository, check the SIDD terms yourself.**
+The dataset is distributed for research use and its terms govern
+redistribution of the images; they are not covered by the licence on the
+viewer code. Everything under a `<method>/` folder is model output from
+this project and carries no such restriction.
 
-With your own copy of SIDD you can regenerate the missing images locally
-and they will appear with no code change.
+To build a copy with the dataset images left out:
+
+```sh
+python tools/export_public.py --out ../viewer-public --exclude-input-reference
+```
+
+The viewer handles their absence gracefully — the input and reference
+panels show *not available* with an explanation, the metrics are still
+shown because they were computed before the export, and the
+difference view disables itself.
 
 ## The folder convention
 
