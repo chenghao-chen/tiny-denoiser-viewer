@@ -1,0 +1,37 @@
+{
+  "pretrained_nafnet_w32": {
+    "params": 29159715,
+    "variant": "29m",
+    "name": "NAFNet-SIDD-width32",
+    "source": "https://github.com/megvii-research/NAFNet (docs/SIDD.md, Google Drive id 1lsByk21Xw-6aW7epCwOQxvm6HYCQZPHZ)",
+    "trained_by_authors_on": "SIDD-Medium sRGB, 200K iterations"
+  },
+  "pretrained_nafnet_w64": {
+    "params": 115982915,
+    "variant": "116m",
+    "name": "NAFNet-SIDD-width64",
+    "source": "https://github.com/megvii-research/NAFNet (docs/SIDD.md, Google Drive id 14Fht1QQJ2gMlk4N1ERCRuElg8JfjrWWR)",
+    "trained_by_authors_on": "SIDD-Medium sRGB, 200K iterations"
+  },
+  "pretrained_restormer": {
+    "params": 26111668,
+    "variant": "26m",
+    "name": "Restormer (real denoising)",
+    "source": "https://github.com/swz30/Restormer/releases/download/v1.0/real_denoising.pth",
+    "trained_by_authors_on": "SIDD-Medium sRGB, progressive patch sizes, 300K iterations"
+  },
+  "pretrained_scunet": {
+    "params": 17946072,
+    "variant": "18m",
+    "name": "SCUNet (colour, real, PSNR-oriented)",
+    "source": "https://github.com/cszn/KAIR/releases/download/v1.0/scunet_color_real_psnr.pth",
+    "trained_by_authors_on": "synthetic degradation model (NOT SIDD) -- zero-shot here"
+  },
+  "pretrained_drunet": {
+    "params": 32640960,
+    "variant": "33m",
+    "name": "DRUNet colour (DPIR)",
+    "source": "https://github.com/cszn/KAIR/releases/download/v1.0/drunet_color.pth",
+    "trained_by_authors_on": "synthetic AWGN, non-blind (NOT SIDD) -- zero-shot here"
+  }
+}
