@@ -120,6 +120,11 @@ h1 { font-size: 17px; margin: 0; }
 }
 
 .field, .check { display: inline-flex; align-items: center; gap: 5px; color: var(--text-3); white-space: nowrap; }
+/* `el.hidden = true` only works through the UA rule [hidden]{display:none},
+   which the class rule above outranks. Without this, hiding a .field or
+   .check from JS silently does nothing -- which left the chart tick box
+   showing on tab 1, where it controls nothing. */
+.field[hidden], .check[hidden] { display: none; }
 /* The control bar already wraps; these two labels are long, so let them
    sit as whole units and tint when active rather than stretch the row. */
 .check input[type=checkbox] { accent-color: var(--accent); }
