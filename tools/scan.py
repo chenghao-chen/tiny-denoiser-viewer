@@ -159,21 +159,11 @@ def scan_scene(scene_dir: Path, content: Path, rep: Report,
                  f"({sorted({f'{w}x{h}' for w, h in real})})")
 
     metrics: Dict[str, Dict[str, float]] = {}
-    params: Dict[str, Dict[str, int]] = {}
     for row in read_csv_rows(scene_dir / "metrics.csv", rep):
         method = (row.get("method") or "").strip()
         variant = (row.get("variant") or "").strip()
         if not method:
             continue
-        # `params` is optional: a metrics.csv without the column, or with
-        # it empty for some rows, simply contributes nothing here.
-        raw_params = (row.get("params") or "").strip()
-        if raw_params:
-            try:
-                params.setdefault(method, {})[variant] = int(float(raw_params))
-            except ValueError:
-                rep.warn(f"{scene_dir}/metrics.csv: {method}/{variant} has a "
-                         f"params value that is not a number ({raw_params!r})")
         value = row.get(metric_name)
         if value is None:
             # Fall back to the first numeric column that is not method/variant.
@@ -209,11 +199,7 @@ def scan_scene(scene_dir: Path, content: Path, rep: Report,
         "metrics": metrics,
         "caption": cfg.get("caption", ""),
         "gain": cfg.get("gain"),
-        # scene.json's own meta, plus the exact parameter counts when the
-        # optional column is present. The key is omitted entirely when it
-        # is not, so nothing changes for content that does not use it.
-        "meta": ({**cfg.get("meta", {}), "params": params}
-                 if params else cfg.get("meta", {})),
+        "meta": cfg.get("meta", {}),
         "tags": cfg.get("tags", []),
         "size": list(real[0]) if real else None,
         "bytes": total_bytes,

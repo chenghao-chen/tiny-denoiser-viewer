@@ -1,0 +1,7 @@
+method,variant,psnr
+_input,,18.3957
+drunet,33m,25.5274
+nafnet_w32,29m,32.6571
+nafnet_w64,116m,34.8964
+restormer,26m,32.9824
+scunet,18m,29.2444
