@@ -30,6 +30,7 @@ const C = {
 /* Flip either default here. */
 const SHOW_PARAM_COUNT_DEFAULT = false;   // "Show parameter count"
 const SHOW_CHART_DEFAULT = true;          // Tab 2's PSNR-vs-parameters chart
+const SHOW_PRETRAINED_DEFAULT = false;    // "include pretrained large models"
 
 const IDX = window.VIEWER_INDEX || null;
 const $ = (s, r) => (r || document).querySelector(s);
@@ -56,6 +57,28 @@ function start() {
 
   const byId = {};
   IDX.collections.forEach(c => { byId[c.id] = c; });
+
+  /* A collection may have a companion holding inference-only reference
+     models. They stay separate on disk -- their methods have a single
+     fixed size each, so merging them would put four empty cells in every
+     row of the main grid. The tick box pulls them in per scene instead. */
+  const COMPANION = { srgb_best_lr: 'srgb_pretrained' };
+  const companionOf = id => byId[COMPANION[id]] || null;
+
+  /** Does the companion cover this scene? Answered from the index, so no
+   *  fetch is needed to decide whether the tick box is usable. */
+  function companionHasScene(collId, sceneId) {
+    const comp = companionOf(collId);
+    return !!(comp && comp.scenes.some(s => s.id === sceneId));
+  }
+
+  /* Collections that were merged into another one. An old bookmark names
+     a collection that no longer exists; send it to the survivor rather
+     than fall back to the first collection in the list, which could be a
+     different domain entirely. */
+  const RETIRED = { srgb_pretrained: 'srgb_best_lr' };
+  const resolveCollection = id =>
+    (id && !byId[id] && byId[RETIRED[id]]) ? RETIRED[id] : id;
   const groups = IDX.groups && IDX.groups.length ? IDX.groups
     : Array.from(new Set(IDX.collections.map(c => c.group)));
 
@@ -64,6 +87,7 @@ function start() {
     variant: null, method: null, zoom: 0, cols: 4,
     sort: false, showMetric: true, diff: false, amp: 8,
     showParams: SHOW_PARAM_COUNT_DEFAULT, showChart: SHOW_CHART_DEFAULT,
+    showPretrained: SHOW_PRETRAINED_DEFAULT,
     tags: new Set(), query: '', ab: false, abA: null, abB: null, abSplit: 50,
   };
   let pinned = null;        // {u, v} normalised zoom centre
@@ -86,6 +110,18 @@ function start() {
     s.onload = () => done((window.VIEWER_SCENES || {})[key] || null);
     s.onerror = () => done(null);
     document.head.appendChild(s);
+  }
+
+  /** Load the main scene and, when wanted and available, its companion. */
+  function loadSceneAndCompanion(done) {
+    loadScene(sceneKey(), sc => {
+      const comp = companionOf(S.config);
+      if (!S.showPretrained || !comp || !companionHasScene(S.config, S.scene)) {
+        done(sc, null, comp);
+        return;
+      }
+      loadScene(`${comp.id}__${S.scene}`, cs => done(sc, cs, comp));
+    });
   }
 
   function variantsOf(c) { return c ? c.variants : []; }
@@ -150,6 +186,7 @@ function start() {
     // only written when they differ from the default, so old links stay short
     if (S.showParams !== SHOW_PARAM_COUNT_DEFAULT) p.set('pc', S.showParams ? '1' : '0');
     if (S.showChart !== SHOW_CHART_DEFAULT) p.set('cc', S.showChart ? '1' : '0');
+    if (S.showPretrained) p.set('pt', '1');   // written only when on
     history.replaceState(null, '', '#' + p.toString());
   }
 
@@ -161,6 +198,7 @@ function start() {
       zoom: p.get('z') ? Number(p.get('z')) : null,
       split: p.get('p') != null ? Number(p.get('p')) : null,
       showParams: p.get('pc'), showChart: p.get('cc'),
+      showPretrained: p.get('pt'),
     };
   }
 
@@ -441,7 +479,20 @@ function start() {
     // the chart tick box only means anything on tab 2
     $('#showchartwrap').hidden = S.tab !== 'scale';
 
-    loadScene(sceneKey(), sc => {
+    // The pretrained box is only meaningful where a companion exists, and
+    // only usable where the companion covers this scene. Switching to a
+    // scene without one greys it out rather than showing empty slots.
+    const comp0 = companionOf(S.config);
+    const avail = !!comp0 && companionHasScene(S.config, S.scene);
+    const box = $('#showpretrained');
+    $('#showpretrainedwrap').hidden = !comp0;
+    box.disabled = !avail;
+    box.checked = S.showPretrained;
+    $('#showpretrainedwrap').title = avail ? ''
+      : 'no pretrained results for this scene';
+    $('#showpretrainedwrap').style.opacity = avail ? '' : '0.5';
+
+    loadSceneAndCompanion((sc, cs, comp) => {
       if (!sc) { grid.appendChild(el('p', 'warn', 'scene data did not load')); return; }
       const base = inputMetric(sc);
       const items = [];
@@ -473,6 +524,28 @@ function start() {
             badge: v.badge, vid: v.id });
         });
       }
+      // Inference-only models, each at its own fixed size. They are
+      // appended whatever the size selector says, because they are not
+      // points on that axis. A method with no image here is skipped
+      // rather than drawn as an empty slot.
+      const extra = [];
+      if (cs && comp) {
+        comp.methods.forEach(m => {
+          const byVariant = cs.images[m] || {};
+          const vid = Object.keys(byVariant)[0];
+          if (!vid) return;
+          const v = (comp.variants || []).find(x => x.id === vid);
+          const label = v && v.label ? v.label : vid;
+          extra.push({
+            name: S.showParams ? `${m} (${label})` : m,
+            src: byVariant[vid],
+            value: metricFor(cs, m, vid),
+            badge: (v && v.badge) || 'inference only, not size-matched',
+            pretrained: true,
+          });
+        });
+      }
+
       if (sc.reference || expected) {
         items.push({ name: 'reference', src: sc.reference, value: null });
       }
@@ -484,7 +557,7 @@ function start() {
         return MET.higherIsBetter ? bv - av : av - bv;
       });
       const ordered = []
-        .concat(items.filter(i => i.name === 'input'), body,
+        .concat(items.filter(i => i.name === 'input'), body, extra,
                 items.filter(i => i.name === 'reference'));
 
       ordered.forEach(i => {
@@ -503,9 +576,9 @@ function start() {
       if (!sc.reference && S.diff) { S.diff = false; dbox.checked = false;
         $('#ampwrap').hidden = true; }
 
-      if (S.tab === 'scale' && S.showChart) renderChart(c, sc);
+      if (S.tab === 'scale' && S.showChart) renderChart(c, sc, cs, comp);
       else $('#chart').textContent = '';
-      renderCaption(c, sc);
+      renderCaption(c, sc, !!cs);
       applyZoom();
       applyDiff(sc);
       if (S.ab) renderAB(c, sc);
@@ -513,47 +586,94 @@ function start() {
     });
   }
 
-  function renderCaption(c, sc) {
-    const bits = [];
-    const missing = [];
-    if (!sc.input && inputMetric(sc) != null) missing.push('input');
-    if (!sc.reference && inputMetric(sc) != null) missing.push('reference');
-    if (missing.length) {
-      bits.push('The ' + missing.join(' and ') + ' image' +
-        (missing.length > 1 ? 's are' : ' is') + ' not included in this copy '
-        + '(dataset licence), so ' + (missing.length > 1 ? 'those panels' : 'that panel')
-        + ' shows "not available". The metric values were computed against '
-        + 'the real reference before the images were removed, so they are '
-        + 'unaffected; the difference view needs the reference and is '
-        + 'unavailable.');
+  /** The caption block. The gain line is built as its own element so it
+   *  can be styled; `captionPlain` mirrors the whole thing as text for
+   *  the PNG export, which has no DOM to read back. */
+  let captionPlain = '';
+
+  function renderCaption(c, sc, hasPretrained) {
+    const box = $('#caption');
+    box.textContent = '';
+    const parts = [];
+
+    // 1. the display gain, prominent
+    if (sc.gain != null) {
+      const g = Number(sc.gain);
+      const txt = `Display gain: \u00d7${g.toFixed(g < 10 ? 2 : 1)}`
+        + (g === 1 ? ' (none)' : '');
+      box.appendChild(el('strong', 'gain', txt));
+      parts.push(txt + '.');
+      // 2. what the gain does and does not affect. Verified in
+      //    export_to_viewer.py: Adapter.psnr() is called on the linear
+      //    arrays, to_display() applies the gain separately.
+      const note = 'Display gain is for viewing only; '
+        + 'PSNR is computed without it.';
+      box.appendChild(el('span', 'gainnote', note));
+      parts.push(note);
     }
-    if (c.caption) bits.push(c.caption);
-    if (sc.caption) bits.push(sc.caption);
-    bits.push('Scene ' + sc.id + '.');
+
+    const rest = [];
+    if (S.showPretrained && companionOf(S.config)) {
+      rest.push(hasPretrained
+        ? 'Pretrained models are shown at their own fixed size; they are '
+          + 'inference only, trained by their authors on different data '
+          + 'with a different recipe, and are not size-matched to the '
+          + 'other models.'
+        : 'No pretrained results for this scene.');
+    }
+    // 3. the exact mapping, which lives in the collection's own caption
+    //    so the viewer stays independent of any one project.
+    if (c.caption) rest.push(c.caption);
+    if (sc.caption) rest.push(sc.caption);
+    rest.push('Scene ' + sc.id + '.');
     if (MET.name && MET.name !== 'value') {
-      bits.push('Metric: ' + MET.name + (MET.unit ? ' (' + MET.unit + ')' : '') +
-        ', ' + (MET.higherIsBetter ? 'higher is better' : 'lower is better') + '.');
+      rest.push('Metric: ' + MET.name + (MET.unit ? ' (' + MET.unit + ')' : '')
+        + ', ' + (MET.higherIsBetter ? 'higher is better' : 'lower is better') + '.');
     }
-    if (sc.gain != null) bits.push('Display gain ×' + sc.gain + '.');
     if (sc.meta) {
-      const m = Object.keys(sc.meta).map(k => k + ' ' + sc.meta[k]).join(', ');
-      if (m) bits.push(m + '.');
+      const m = Object.keys(sc.meta)
+        .filter(k => k !== 'params')
+        .map(k => k + ' ' + sc.meta[k]).join(', ');
+      if (m) rest.push(m + '.');
     }
-    $('#caption').textContent = bits.join(' ');
+    box.appendChild(el('span', 'rest', rest.join(' ')));
+    captionPlain = parts.concat(rest).join(' ');
   }
 
   // ------------------------------------------------------------- chart
 
-  function renderChart(c, sc) {
+  function renderChart(c, sc, cs, comp) {
     const box = $('#chart'); box.textContent = '';
     const vs = variantsOf(c).filter(v => v.value != null);
     const pts = vs.map(v => {
       const exact = S.showParams ? exactParams(sc, c, S.method, v.id) : null;
       return { x: v.value, y: metricFor(sc, S.method, v.id), id: v.id,
+               badge: !!v.badge,
                label: exact != null ? groupDigits(exact) : v.label };
     }).filter(p => p.y != null);
-    if (pts.length < 2) { box.appendChild(el('p', 'muted',
-      'Not enough points to plot for this scene.')); return; }
+    // Fixed-size reference models, plotted where they really sit on the
+    // parameter axis. They belong to no curve, so they are points only.
+    const refPts = [];
+    if (cs && comp) {
+      comp.methods.forEach(m => {
+        const vid = Object.keys(cs.images[m] || {})[0];
+        if (!vid) return;
+        const v = (comp.variants || []).find(x => x.id === vid);
+        const y = metricFor(cs, m, vid);
+        if (v && v.value != null && y != null) {
+          refPts.push({ x: v.value, y, label: m, size: v.label });
+        }
+      });
+    }
+
+    if (pts.length + refPts.length < 2) {
+      const only = pts.length === 1 ? pts[0] : null;
+      box.appendChild(el('p', 'muted', only
+        ? `${S.method} has a single point for this scene `
+          + `(${only.label}: ${fmt(only.y)}${unit}), so there is no curve to plot.`
+        : 'Not enough points to plot for this scene.'));
+      return;
+    }
 
     const curve = (c.curves || []).filter(k => k.method === S.method)
       .map(k => { const v = variantById(c, k.variant);
@@ -561,7 +681,7 @@ function start() {
       .filter(Boolean).sort((a, b) => a.x - b.x);
 
     const W = 680, H = 300, M = { l: 56, r: 16, t: 14, b: 42 };
-    const all = pts.concat(curve);
+    const all = pts.concat(curve, refPts);
     const base = inputMetric(sc);
     const xs = all.map(p => p.x), ys = all.map(p => p.y).concat(base == null ? [] : [base]);
     const lg = !!CH.xLog;
@@ -594,6 +714,8 @@ function start() {
     }
     pts.forEach(p => add('text', { x: X(p.x), y: H - M.b + 16, 'text-anchor': 'middle',
       'font-size': 11, fill: C.accent }, p.label));
+    refPts.forEach(p => add('text', { x: X(p.x), y: H - M.b + 16,
+      'text-anchor': 'middle', 'font-size': 11, fill: C.text3 }, p.size));
     add('text', { x: (M.l + W - M.r) / 2, y: H - 6, 'text-anchor': 'middle',
       'font-size': 12, fill: C.text }, AX.variant + (lg ? ' (log scale)' : ''));
     add('text', { x: 14, y: (M.t + H - M.b) / 2, 'font-size': 12, fill: C.text,
@@ -617,8 +739,14 @@ function start() {
     add('polyline', { fill: 'none', stroke: C.accent, 'stroke-width': 2.2,
       points: sorted.map(p => X(p.x) + ',' + Y(p.y)).join(' ') });
     sorted.forEach(p => {
-      const dot = add('circle', { cx: X(p.x), cy: Y(p.y), r: 5, fill: C.accent,
-        class: 'pt' });
+      // A badged variant is an inference-only reference point, not a
+      // trained step on this curve: square it so it reads differently.
+      const dot = p.badge
+        ? add('rect', { x: X(p.x) - 5, y: Y(p.y) - 5, width: 10, height: 10,
+                        fill: '#d9d9d9', stroke: C.text, 'stroke-width': 1.6,
+                        class: 'pt' })
+        : add('circle', { cx: X(p.x), cy: Y(p.y), r: 5, fill: C.accent,
+                          class: 'pt' });
       dot.addEventListener('click', () => {
         document.querySelectorAll('#grid .panel').forEach(n =>
           n.classList.toggle('highlight', n.dataset.vid === p.id));
@@ -627,6 +755,18 @@ function start() {
       t.textContent = p.label + ': ' + fmt(p.y) + unit;
       dot.appendChild(t);
     });
+    refPts.forEach(p => {
+      add('rect', { x: X(p.x) - 6, y: Y(p.y) - 6, width: 12, height: 12,
+                    fill: '#d9d9d9', stroke: C.text, 'stroke-width': 1.6 });
+      add('text', { x: X(p.x), y: Y(p.y) - 11, 'text-anchor': 'middle',
+                    'font-size': 10.5, fill: C.text },
+          `${p.label} ${p.size}`);
+    });
+    if (refPts.length) {
+      add('text', { x: W - M.r - 4, y: M.t + 12, 'text-anchor': 'end',
+                    'font-size': 11, fill: C.text3 },
+          'squares: inference only, not size-matched');
+    }
     box.appendChild(svg);
   }
 
@@ -808,7 +948,7 @@ function start() {
 
       const pw = cw * SCALE, ph = chh * SCALE;
       const PAD = 14, TITLE = 34, LABELS = 26;
-      const capLines = wrapText($('#caption').textContent, 110);
+      const capLines = wrapText(captionPlain || $('#caption').textContent, 110);
       const W = pw + 2 * PAD;
       const H = TITLE + ph + LABELS + capLines.length * 18 + 2 * PAD;
       const cv = document.createElement('canvas');
@@ -887,7 +1027,7 @@ function start() {
         : Math.min(panels.length, S.cols);
       const rows = Math.ceil(panels.length / cols);
       const PAD = 14, HEAD = 46, TITLE = 34;
-      const capLines = wrapText($('#caption').textContent, 110);
+      const capLines = wrapText(captionPlain || $('#caption').textContent, 110);
       const chartSvg = (S.tab === 'scale' && S.showChart)
         ? $('#chart svg') : null;
       const chartH = chartSvg ? 320 : 0;
@@ -1032,6 +1172,8 @@ function start() {
     renderStage(); writeHash(); };
   $('#showchart').onchange = e => { S.showChart = e.target.checked;
     renderStage(); writeHash(); };
+  $('#showpretrained').onchange = e => { S.showPretrained = e.target.checked;
+    renderStage(); writeHash(); };
   $('#diff').onchange = e => { S.diff = e.target.checked;
     $('#ampwrap').hidden = !S.diff; renderStage(); };
   $('#amp').oninput = e => { S.amp = Number(e.target.value); if (S.diff) renderStage(); };
@@ -1072,7 +1214,10 @@ function start() {
 
   const h = readHash();
   setGroup(h.group || groups[0], false);
-  if (h.config && byId[h.config]) { S.config = h.config; S.group = byId[h.config].group; }
+  const wantedConfig = resolveCollection(h.config);
+  if (wantedConfig && byId[wantedConfig]) {
+    S.config = wantedConfig; S.group = byId[wantedConfig].group;
+  }
   if (h.tab === 'compare' || h.tab === 'scale') S.tab = h.tab;
   reconcile();
   if (h.scene && coll().scenes.some(s => s.id === h.scene)) S.scene = h.scene;
@@ -1082,8 +1227,10 @@ function start() {
   // absent keys keep the defaults, so links made before this existed work
   if (h.showParams != null) S.showParams = h.showParams === '1';
   if (h.showChart != null) S.showChart = h.showChart === '1';
+  if (h.showPretrained != null) S.showPretrained = h.showPretrained === '1';
   $('#showparams').checked = S.showParams;
   $('#showchart').checked = S.showChart;
+  $('#showpretrained').checked = S.showPretrained;
   if (h.split != null && isFinite(h.split)) {
     // Accept a fraction (0..1), which is what writeHash emits.
     S.abSplit = Math.max(0, Math.min(100, h.split * 100));

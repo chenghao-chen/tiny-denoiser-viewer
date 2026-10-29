@@ -1,6 +1,6 @@
 {
   "group": "sRGB",
   "label": "pretrained, inference only",
-  "caption": "The authors' published checkpoints run through this evaluation: inference only, their training data and recipe, not size-matched to the trained runs and not comparable with them. SCUNet and DRUNet were never trained on SIDD, so those two are zero-shot. Shown as stored, no tone mapping. PSNR is the per-block value against the reference, peak 1.0, prediction clamped.",
+  "caption": "The authors' published checkpoints run through this evaluation: inference only, their training data and recipe, not size-matched to the trained runs and not comparable with them. SCUNet and DRUNet were never trained on SIDD, so those two are zero-shot. Display mapping, identical for every panel: shown as stored. The value is clamped to [0,1] and quantised to 8-bit RGB. There is no exposure gain and no tone curve. Source: SrgbAdapter.to_display in scripts/viewer/export_to_viewer.py.",
   "order": 1
 }

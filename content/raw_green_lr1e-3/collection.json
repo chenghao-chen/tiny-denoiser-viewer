@@ -1,6 +1,6 @@
 {
   "group": "RAW green plane",
   "label": "lr 1e-3, seed 0",
-  "caption": "Linear RAW green plane, clamped to [0,1], one exposure gain per scene shared by all panels (g = min(0.8 / p99(reference), 20), never below 1), then the true sRGB transfer curve, 8-bit grayscale. PSNR is the per-block value against the reference on linear data, peak 1.0, prediction clamped -- the same convention as the main results.",
+  "caption": "Display mapping, identical for every panel: the linear green plane is clamped to [0,1], multiplied by this scene's gain, clamped again, then passed through the sRGB transfer curve (12.92x for x <= 0.0031308, otherwise 1.055*x^(1/2.4) - 0.055) and quantised to 8-bit grey. The gain is min(max(0.8 / p99(reference), 1), 20). Source: RawGreenAdapter.to_display in scripts/viewer/export_to_viewer.py.",
   "order": 0
 }

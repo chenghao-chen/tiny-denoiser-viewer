@@ -262,7 +262,18 @@ h1 { font-size: 17px; margin: 0; }
 #chart svg { max-width: 100%; height: auto; border: 1px solid var(--border); border-radius: 7px; background: var(--panel); }
 #chart .pt { cursor: pointer; }
 
-.caption { color: var(--text-3); font-size: 12.5px; margin: 14px 0 0; max-width: 95ch; }
+.caption {
+  color: var(--text-3); font-size: 12.5px; margin: 14px 0 0; max-width: 95ch;
+  line-height: 1.5;
+}
+/* The display gain changes what the pixels look like, so it is the one
+   thing in the caption that must not be skimmed past. */
+.caption .gain {
+  display: inline-block; font-size: 15px; font-weight: 700;
+  color: var(--accent); margin-right: 8px;
+}
+.caption .gainnote { color: var(--text-2); margin-right: 6px; }
+.caption .rest { display: block; margin-top: 4px; }
 .warn { color: var(--accent-2-text); font-size: 12.5px; }
 
 .notice { margin: 40px auto; max-width: 60ch; border: 1px solid var(--border); border-radius: 8px; padding: 18px 22px; }
