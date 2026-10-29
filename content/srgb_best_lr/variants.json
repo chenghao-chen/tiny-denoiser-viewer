@@ -16,5 +16,25 @@
   },
   "250k": {
     "label": "250K"
+  },
+  "29m": {
+    "label": "29M",
+    "badge": "inference only, not size-matched"
+  },
+  "116m": {
+    "label": "116M",
+    "badge": "inference only, not size-matched"
+  },
+  "26m": {
+    "label": "26M",
+    "badge": "inference only, not size-matched"
+  },
+  "18m": {
+    "label": "18M",
+    "badge": "inference only, not size-matched"
+  },
+  "33m": {
+    "label": "33M",
+    "badge": "inference only, not size-matched"
   }
 }

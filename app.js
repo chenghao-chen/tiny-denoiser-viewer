@@ -56,6 +56,14 @@ function start() {
 
   const byId = {};
   IDX.collections.forEach(c => { byId[c.id] = c; });
+
+  /* Collections that were merged into another one. An old bookmark names
+     a collection that no longer exists; send it to the survivor rather
+     than fall back to the first collection in the list, which could be a
+     different domain entirely. */
+  const RETIRED = { srgb_pretrained: 'srgb_best_lr' };
+  const resolveCollection = id =>
+    (id && !byId[id] && byId[RETIRED[id]]) ? RETIRED[id] : id;
   const groups = IDX.groups && IDX.groups.length ? IDX.groups
     : Array.from(new Set(IDX.collections.map(c => c.group)));
 
@@ -550,10 +558,17 @@ function start() {
     const pts = vs.map(v => {
       const exact = S.showParams ? exactParams(sc, c, S.method, v.id) : null;
       return { x: v.value, y: metricFor(sc, S.method, v.id), id: v.id,
+               badge: !!v.badge,
                label: exact != null ? groupDigits(exact) : v.label };
     }).filter(p => p.y != null);
-    if (pts.length < 2) { box.appendChild(el('p', 'muted',
-      'Not enough points to plot for this scene.')); return; }
+    if (pts.length < 2) {
+      const only = pts.length === 1 ? pts[0] : null;
+      box.appendChild(el('p', 'muted', only
+        ? `${S.method} has a single point for this scene `
+          + `(${only.label}: ${fmt(only.y)}${unit}), so there is no curve to plot.`
+        : 'Not enough points to plot for this scene.'));
+      return;
+    }
 
     const curve = (c.curves || []).filter(k => k.method === S.method)
       .map(k => { const v = variantById(c, k.variant);
@@ -617,8 +632,14 @@ function start() {
     add('polyline', { fill: 'none', stroke: C.accent, 'stroke-width': 2.2,
       points: sorted.map(p => X(p.x) + ',' + Y(p.y)).join(' ') });
     sorted.forEach(p => {
-      const dot = add('circle', { cx: X(p.x), cy: Y(p.y), r: 5, fill: C.accent,
-        class: 'pt' });
+      // A badged variant is an inference-only reference point, not a
+      // trained step on this curve: square it so it reads differently.
+      const dot = p.badge
+        ? add('rect', { x: X(p.x) - 5, y: Y(p.y) - 5, width: 10, height: 10,
+                        fill: '#d9d9d9', stroke: C.text, 'stroke-width': 1.6,
+                        class: 'pt' })
+        : add('circle', { cx: X(p.x), cy: Y(p.y), r: 5, fill: C.accent,
+                          class: 'pt' });
       dot.addEventListener('click', () => {
         document.querySelectorAll('#grid .panel').forEach(n =>
           n.classList.toggle('highlight', n.dataset.vid === p.id));
@@ -1072,7 +1093,10 @@ function start() {
 
   const h = readHash();
   setGroup(h.group || groups[0], false);
-  if (h.config && byId[h.config]) { S.config = h.config; S.group = byId[h.config].group; }
+  const wantedConfig = resolveCollection(h.config);
+  if (wantedConfig && byId[wantedConfig]) {
+    S.config = wantedConfig; S.group = byId[wantedConfig].group;
+  }
   if (h.tab === 'compare' || h.tab === 'scale') S.tab = h.tab;
   reconcile();
   if (h.scene && coll().scenes.some(s => s.id === h.scene)) S.scene = h.scene;

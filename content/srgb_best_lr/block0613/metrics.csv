@@ -42,6 +42,11 @@ poolformer_unet,1m,40.5744
 poolformer_unet,250k,40.3024
 poolformer_unet,25k,34.8837
 poolformer_unet,50k,39.8375
+pretrained_drunet,33m,36.3793
+pretrained_nafnet_w32,29m,42.0861
+pretrained_nafnet_w64,116m,42.7869
+pretrained_restormer,26m,41.9367
+pretrained_scunet,18m,36.4767
 repvgg_unet,100k,39.2283
 repvgg_unet,10k,30.5755
 repvgg_unet,1m,39.7202
