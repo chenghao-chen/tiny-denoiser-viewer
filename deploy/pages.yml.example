@@ -1,0 +1,57 @@
+# INACTIVE EXAMPLE -- this file does nothing where it is.
+#
+# To use it: copy it to .github/workflows/pages.yml in the repository that
+# holds the viewer (the exported copy, or this one), commit and push. Then
+# in Settings -> Pages set "Build and deployment -> Source" to
+# "GitHub Actions".
+#
+# It regenerates data/ from content/ on every push, so you never have to
+# commit a stale data/index.js.
+
+name: Deploy viewer to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Pillow (scan.py uses it to validate image sizes)
+        run: python -m pip install --quiet Pillow
+
+      - name: Regenerate data/ from content/
+        run: python tools/scan.py
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

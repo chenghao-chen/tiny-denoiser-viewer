@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Image comparison viewer</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header id="top">
+  <div class="brand">
+    <h1 id="title">Image comparison viewer</h1>
+    <span id="subtitle" class="muted"></span>
+  </div>
+  <div id="groups" class="segmented" role="tablist" aria-label="Group"></div>
+  <label class="field">Config
+    <select id="config"></select>
+  </label>
+  <div class="spacer"></div>
+  <div class="tabs" role="tablist">
+    <button class="tab" data-tab="compare" aria-selected="true">1 · Compare methods</button>
+    <button class="tab" data-tab="scale" aria-selected="false">2 · Scale one method</button>
+  </div>
+  <button id="save" class="primary" title="Save the current view as a PNG (s)">Save PNG</button>
+  <button id="savecrops" title="Save magnified crops of the zoom region (shift+s)">Save zoom crops</button>
+  <button id="copy" title="Copy the current view to the clipboard">Copy</button>
+  <button id="help" class="round" title="Keyboard shortcuts">?</button>
+</header>
+
+<div id="missing" class="notice" hidden>
+  <strong>No data yet.</strong>
+  <p>Run <code>python tools/scan.py</code> in the <code>viewer/</code>
+     folder, then refresh. To try it with synthetic content first, run
+     <code>python tools/make_demo.py</code> and then the scan.</p>
+</div>
+
+<main id="app" hidden>
+  <aside id="sidebar">
+    <input id="search" type="search" placeholder="Search scenes…" aria-label="Search scenes">
+    <div id="tags" class="chips"></div>
+    <ul id="scenes" class="scenelist"></ul>
+  </aside>
+
+  <section id="stage">
+    <div id="controls" class="bar">
+      <span id="picker-wrap" class="field-group"></span>
+      <label class="field">Columns
+        <input id="cols" type="range" min="1" max="8" value="4">
+      </label>
+      <label class="field">Zoom
+        <select id="zoom">
+          <option value="0">off</option><option value="2">2×</option>
+          <option value="4">4×</option><option value="8">8×</option>
+        </select>
+      </label>
+      <label class="check"><input id="sort" type="checkbox"> sort by metric</label>
+      <label class="check"><input id="showmetric" type="checkbox" checked> show metric</label>
+      <label class="check"><input id="diff" type="checkbox"> difference from reference</label>
+      <label class="field" id="ampwrap" hidden>×<input id="amp" type="range" min="1" max="30" value="8"></label>
+      <button id="ab">Compare two</button>
+    </div>
+
+    <div id="abbar" class="bar" hidden>
+      <label class="field">A <select id="abA"></select></label>
+      <label class="field">B <select id="abB"></select></label>
+      <label class="field">split <input id="absplit" type="range" min="0" max="100" value="50"></label>
+      <button id="abclose">close</button>
+    </div>
+
+    <div id="grid" class="grid"></div>
+    <div id="chartwrap" hidden>
+      <div id="chart"></div>
+    </div>
+    <p id="caption" class="caption"></p>
+    <p id="warn" class="warn" hidden></p>
+  </section>
+</main>
+
+<dialog id="helpbox">
+  <h2>Keyboard</h2>
+  <table>
+    <tr><td>←&nbsp;→</td><td>previous / next scene</td></tr>
+    <tr><td>↑&nbsp;↓</td><td>tab 1: variant &nbsp;·&nbsp; tab 2: method</td></tr>
+    <tr><td>1&nbsp;2</td><td>switch tab</td></tr>
+    <tr><td>g</td><td>next group</td></tr>
+    <tr><td>c</td><td>next config</td></tr>
+    <tr><td>z</td><td>cycle zoom (off → 2× → 4× → 8×)</td></tr>
+    <tr><td>s</td><td>save PNG &nbsp;·&nbsp; shift+s save zoom crops</td></tr>
+    <tr><td>click</td><td>pin the zoom region &nbsp;·&nbsp; Esc unpin</td></tr>
+  </table>
+  <p class="muted">Right-click a panel to save it on its own.</p>
+  <form method="dialog"><button>close</button></form>
+</dialog>
+
+<div id="menu" class="ctxmenu" hidden></div>
+
+<script src="data/index.js" onerror="window.__noindex=1"></script>
+<script src="app.js"></script>
+</body>
+</html>

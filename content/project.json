@@ -1,0 +1,18 @@
+{
+  "title": "tiny-denoiser: architecture comparison",
+  "axis": {
+    "collectionGroup": "Domain",
+    "config": "Run",
+    "method": "Architecture",
+    "variant": "Parameters"
+  },
+  "metric": {
+    "name": "psnr",
+    "unit": "dB",
+    "higherIsBetter": true,
+    "decimals": 2
+  },
+  "chart": {
+    "xLog": true
+  }
+}

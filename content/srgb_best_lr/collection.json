@@ -1,0 +1,6 @@
+{
+  "group": "sRGB",
+  "label": "tuned lr, seed 0",
+  "caption": "SIDD sRGB, 3 channels, shown as stored with no tone mapping. PSNR is the per-block value against the reference, peak 1.0, prediction clamped -- the same convention as the main results.",
+  "order": 0
+}
